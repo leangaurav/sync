@@ -401,6 +401,6 @@ func TestResetConcurrentBlocks(t *testing.T) {
 	time.Sleep(time.Millisecond) // let Do() lock the mutex
 	go func() { assert.Equal(t, true, o.Reset()) }()
 	assert.True(t, time.Now().Sub(ts) < time.Millisecond*2)
-	time.Sleep(time.Millisecond * 3)
+	time.Sleep(time.Millisecond * 4)
 	assert.Equal(t, false, o.Done(false))
 }
