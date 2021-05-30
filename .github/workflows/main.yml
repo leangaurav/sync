@@ -6,14 +6,14 @@ on:
       - main
 
 jobs:
-  Run Tests:
+  Tests:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
-      - name: Formatting
+      - name: Formatting Test
         run: |
           test "0" = $(gofmt -l .| wc -l)
-      - name: UnitTests
+      - name: Unit Test
         run: |
           go test .
