@@ -41,6 +41,8 @@ type Once struct {
 	suppressPanic  bool
 	doneFromVerify bool
 	verify         VerifyType
+	unblockCond    *sync.Cond // used to signal any blocking client about change of state
+	unblock        bool
 }
 
 // NewOnce returns a new Once object with the give options. Atleast one function needs to be given.
@@ -61,6 +63,8 @@ func NewOnce(lazyDone bool, suppressPanic bool, verify VerifyType, f FuncType, f
 		lazyDone:      lazyDone,
 		suppressPanic: suppressPanic,
 		verify:        verify,
+		unblockCond:   sync.NewCond(&sync.Mutex{}),
+		unblock:       false,
 	}, nil
 }
 
@@ -98,6 +102,9 @@ func (d *Once) Do() (res bool) {
 	if d.done == 1 {
 		return false
 	}
+
+	// signal all waiting goroutines
+	defer d.unblockCond.Broadcast()
 
 	// check if done needs to be set before or after calling the function
 	if d.lazyDone == false {
@@ -147,23 +154,42 @@ func (d *Once) Do() (res bool) {
 // Value used for lazyDone changes behavior in case of concurrent access.
 // If Done() if called concurrently with Do() it may return true even if Do() is still executing.
 //
-// Done(true)/Done(false) esentially does the same thing right now.
-// In future releases, client will be able to configure blocking behavior for Done.
+// Done(true) : the calling goroutines will block till the state becomes DONE or Close() is called explicitly to unblocak all goroutines
+//              returns true or false based on whether state is DONE or not.
+// Done(false) : returns immediately and returns whether state is DONE or not.
 func (d *Once) Done(block bool) bool {
+
+	// blocking behavior
+	if block {
+		for d.unblock == false {
+			if d.done == 1 {
+				break
+			}
+			d.unblockCond.L.Lock()
+			d.unblockCond.Wait()
+			d.unblockCond.L.Unlock()
+		}
+	}
+
 	return atomic.LoadUint32(&d.done) == 1
 }
 
 // Reset resets Once for reuse.
-// It also returns is reset was actually required or not.
-// Reset is concurrency safe. And if any Do() calls are in progress, Reset will happen after the Do() finishes.
+// It also returns if reset was actually required or not.
+// Reset is concurrency safe. In case a Do() call is already in progress(has acquired the lock), reset will happen after Do() finishes.
 func (d *Once) Reset() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.unblock = false
 	res := atomic.LoadUint32(&d.done) == 1
 	atomic.StoreUint32(&d.done, 0)
 	return res
 }
 
-// Close is no-op right now. It will be available in future release.
-// Close() will be useful when using Done(true) i.e. to unblock the Done() function if using blocking Done(true)
-func (d *Once) Close() {}
+// Close() unblocks all goroutines waiting on Done(true)
+func (d *Once) Close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.unblock = true
+	d.unblockCond.Broadcast()
+}
