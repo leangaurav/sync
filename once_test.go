@@ -404,3 +404,118 @@ func TestResetConcurrentBlocks(t *testing.T) {
 	time.Sleep(time.Millisecond * 4)
 	assert.Equal(t, false, o.Done(false))
 }
+
+func TestBlockingDoneOneGoroutine(t *testing.T) {
+	var (
+		err error
+		o   *Once
+	)
+
+	ts := time.Now()
+	o, err = NewOnce(true, false, VerifyAll, returnTrueWithDelay(time.Millisecond*4))
+	assert.Equal(t, err, nil)
+	go func() { assert.Equal(t, true, o.Do()) }()
+
+	// call Done with block=true
+	assert.Equal(t, true, o.Done(true))
+	assert.True(t, time.Now().Sub(ts) > time.Millisecond*4)
+}
+
+func TestBlockingDoneMultipleGoroutine(t *testing.T) {
+	var (
+		err error
+		o   *Once
+	)
+
+	ts := time.Now()
+	o, err = NewOnce(true, false, VerifyAll, returnTrueWithDelay(time.Millisecond*4))
+	assert.Equal(t, err, nil)
+	go func() { assert.Equal(t, true, o.Do()) }()
+
+	// call Done with block=true
+	var t1, t2 time.Time
+	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
+	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+
+	// block for done to be set
+	o.Done(true)
+	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
+	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
+	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
+
+	assert.True(t, o.Done(false))
+	// once state is DONE, Done(true) should return immediately
+	ts = time.Now()
+	assert.True(t, o.Done(true))
+	assert.True(t, time.Now().Sub(ts) < time.Microsecond*10)
+}
+
+func TestBlockingDoneMultipleGoroutineExplicitClose(t *testing.T) {
+	var (
+		err error
+		o   *Once
+	)
+
+	ts := time.Now()
+	o, err = NewOnce(true, false, VerifyAll, returnFalse)
+	assert.Equal(t, err, nil)
+	go func() { assert.Equal(t, false, o.Do()) }()
+
+	// call Done with block=true
+	var t1, t2 time.Time
+	go func() { assert.Equal(t, false, o.Done(true)); t1 = time.Now() }()
+	go func() { assert.Equal(t, false, o.Done(true)); t2 = time.Now() }()
+
+	// close after 5ms
+	time.Sleep(time.Millisecond * 5)
+	o.Close()
+
+	time.Sleep(time.Microsecond * 500) // wait for t1 and t2 to be set
+
+	// both goroutines should get unblocked immediately after Close()
+	assert.True(t, time.Millisecond*5 < t2.Sub(ts) && t2.Sub(ts) < time.Millisecond*6)
+	assert.True(t, time.Millisecond*5 < t1.Sub(ts) && t1.Sub(ts) < time.Millisecond*6)
+}
+
+func TestBlockingDoneAfterReset(t *testing.T) {
+	var (
+		err error
+		o   *Once
+	)
+
+	ts := time.Now()
+	o, err = NewOnce(true, false, VerifyAll, returnTrueWithDelay(time.Millisecond*4))
+	assert.Equal(t, err, nil)
+	/*
+		Step-1
+	*/
+	go func() { assert.Equal(t, true, o.Do()) }()
+
+	// call Done with block=true
+	var t1, t2 time.Time
+	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
+	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+
+	// block for done to be set
+	o.Done(true)
+	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
+	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
+	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
+
+	/*
+		Step-2: re-test
+	*/
+	assert.True(t, o.Reset())
+	assert.False(t, o.Done(false))
+	go func() { assert.Equal(t, true, o.Do()) }()
+
+	// call Done with block=true
+	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
+	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+
+	// block for done to be set
+	o.Done(true)
+	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
+	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
+	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
+}
