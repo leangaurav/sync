@@ -15,6 +15,26 @@ jobs:
       - name: Formatting Test
         run: |
           test "0" = $(gofmt -l .| wc -l)
-      - name: Unit Test
+      - name: Run test with coverage
+        timeout-minutes: 1
         run: |
-          go test -race -covermode=atomic -coverprofile=coverage.out -covermode=atomic
+          go test -race -covermode=atomic -covermode=atomic
+      - name: Push coverage to env
+        if: ${{ github.event_name == 'push' && github.ref == 'ref/head/main' }}
+        run: |
+          SUMMARY="$(go test -race -covermode=atomic -cover | head -2 | tail -1)"
+          echo "Summary: "$SUMMARY
+          TOKENS=($SUMMARY)
+          echo "Github Event: "$GITHUB_EVENT_NAME
+          echo "COVERAGE=$(echo ${TOKENS[1]})" >> $GITHUB_ENV
+      - name: Create the Badge
+        if: ${{ github.event_name == 'push' && github.ref == 'ref/head/main' }}
+        uses: schneegans/dynamic-badges-action@v1.0.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 0b68be6e579a2a2bdeca2de0174b3459
+          filename: sync_main.json
+          label: Test Coverage
+          message: ${{ env.COVERAGE }}
+          color: green
+          namedLogo: go
