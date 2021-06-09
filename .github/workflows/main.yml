@@ -19,8 +19,19 @@ jobs:
         timeout-minutes: 1
         run: |
           go test -race -covermode=atomic -covermode=atomic
+
+      - name: Set branch
+        run: |
+          REF=${{ github.ref }}
+          echo "BRANCH_NAME=$(echo ${REF##*/})"
+          echo "BRANCH_NAME=$(echo ${REF##*/})" >> $GITHUB_ENV
+      - name: View env vars
+        run: |
+          echo "Github event:"${{ github.event_name }}
+          echo "Branch :"${{ env.BRANCH_NAME }}
+          echo "Next steps:"${{ github.event_name == 'push' && env.BRANCH_NAME == 'main' }}
       - name: Push coverage to env
-        if: ${{ github.event_name == 'push' && github.ref == 'ref/head/main' }}
+        if: ${{ github.event_name == 'push' && env.BRANCH_NAME == 'main' }}
         run: |
           SUMMARY="$(go test -race -covermode=atomic -cover | head -2 | tail -1)"
           echo "Summary: "$SUMMARY
@@ -28,7 +39,7 @@ jobs:
           echo "Github Event: "$GITHUB_EVENT_NAME
           echo "COVERAGE=$(echo ${TOKENS[1]})" >> $GITHUB_ENV
       - name: Create the Badge
-        if: ${{ github.event_name == 'push' && github.ref == 'ref/head/main' }}
+        if: ${{ github.event_name == 'push' && env.BRANCH_NAME == 'main' }}
         uses: schneegans/dynamic-badges-action@v1.0.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
