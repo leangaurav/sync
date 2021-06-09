@@ -42,7 +42,7 @@ type Once struct {
 	doneFromVerify bool
 	verify         VerifyType
 	unblockCond    *sync.Cond // used to signal any blocking client about change of state
-	unblock        bool
+	unblock        uint32
 }
 
 // NewOnce returns a new Once object with the give options. Atleast one function needs to be given.
@@ -64,7 +64,7 @@ func NewOnce(lazyDone bool, suppressPanic bool, verify VerifyType, f FuncType, f
 		suppressPanic: suppressPanic,
 		verify:        verify,
 		unblockCond:   sync.NewCond(&sync.Mutex{}),
-		unblock:       false,
+		unblock:       0,
 	}, nil
 }
 
@@ -161,8 +161,8 @@ func (d *Once) Done(block bool) bool {
 
 	// blocking behavior
 	if block {
-		for d.unblock == false {
-			if d.done == 1 {
+		for atomic.LoadUint32(&d.unblock) == 0 {
+			if atomic.LoadUint32(&d.done) == 1 {
 				break
 			}
 			d.unblockCond.L.Lock()
@@ -180,7 +180,7 @@ func (d *Once) Done(block bool) bool {
 func (d *Once) Reset() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.unblock = false
+	atomic.StoreUint32(&d.unblock, 0)
 	res := atomic.LoadUint32(&d.done) == 1
 	atomic.StoreUint32(&d.done, 0)
 	return res
@@ -190,6 +190,6 @@ func (d *Once) Reset() bool {
 func (d *Once) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.unblock = true
+	atomic.StoreUint32(&d.unblock, 1)
 	d.unblockCond.Broadcast()
 }

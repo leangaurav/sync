@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func TestLazyDone(t *testing.T) {
 	assert.Equal(t, err, nil)
 	go func() { assert.Equal(t, true, o.Do()) }()
 	assert.Equal(t, false, o.Done(false))
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 2)
 	assert.Equal(t, o.Done(false), true)
 }
 
@@ -434,12 +435,13 @@ func TestBlockingDoneMultipleGoroutine(t *testing.T) {
 
 	// call Done with block=true
 	var t1, t2 time.Time
-	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
-	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+	var wg sync.WaitGroup
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t1 = time.Now(); wg.Done() }()
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t2 = time.Now(); wg.Done() }()
 
 	// block for done to be set
 	o.Done(true)
-	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
+	wg.Wait()
 	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
 	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
 
@@ -463,18 +465,20 @@ func TestBlockingDoneMultipleGoroutineExplicitClose(t *testing.T) {
 
 	// call Done with block=true
 	var t1, t2 time.Time
-	go func() { assert.Equal(t, false, o.Done(true)); t1 = time.Now() }()
-	go func() { assert.Equal(t, false, o.Done(true)); t2 = time.Now() }()
+
+	var wg sync.WaitGroup
+	wg.Add(1) // first goroutine calls wg.Done() after calling Add. this avoids this test case having a data race for the waitgroup
+	go func() { wg.Add(1); wg.Done(); assert.Equal(t, false, o.Done(true)); t1 = time.Now(); wg.Done() }()
+	go func() { wg.Add(1); assert.Equal(t, false, o.Done(true)); t2 = time.Now(); wg.Done() }()
 
 	// close after 5ms
-	time.Sleep(time.Millisecond * 5)
-	o.Close()
+	go func() { wg.Add(1); time.Sleep(time.Millisecond * 5); o.Close(); wg.Done() }()
 
-	time.Sleep(time.Microsecond * 500) // wait for t1 and t2 to be set
+	wg.Wait()
 
 	// both goroutines should get unblocked immediately after Close()
-	assert.True(t, time.Millisecond*5 < t2.Sub(ts) && t2.Sub(ts) < time.Millisecond*6)
-	assert.True(t, time.Millisecond*5 < t1.Sub(ts) && t1.Sub(ts) < time.Millisecond*6)
+	assert.True(t, time.Millisecond*5 < t2.Sub(ts) && t2.Sub(ts) < time.Millisecond*8)
+	assert.True(t, time.Millisecond*5 < t1.Sub(ts) && t1.Sub(ts) < time.Millisecond*8)
 }
 
 func TestBlockingDoneAfterReset(t *testing.T) {
@@ -493,11 +497,13 @@ func TestBlockingDoneAfterReset(t *testing.T) {
 
 	// call Done with block=true
 	var t1, t2 time.Time
-	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
-	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+	var wg sync.WaitGroup
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t1 = time.Now(); wg.Done() }()
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t2 = time.Now(); wg.Done() }()
 
 	// block for done to be set
 	o.Done(true)
+	wg.Wait()
 	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
 	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
 	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
@@ -510,11 +516,12 @@ func TestBlockingDoneAfterReset(t *testing.T) {
 	go func() { assert.Equal(t, true, o.Do()) }()
 
 	// call Done with block=true
-	go func() { assert.Equal(t, true, o.Done(true)); t1 = time.Now() }()
-	go func() { assert.Equal(t, true, o.Done(true)); t2 = time.Now() }()
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t1 = time.Now(); wg.Done() }()
+	go func() { wg.Add(1); assert.Equal(t, true, o.Done(true)); t2 = time.Now(); wg.Done() }()
 
 	// block for done to be set
 	o.Done(true)
+	wg.Wait()
 	time.Sleep(time.Millisecond) // wait for t1 and t2 to be set
 	assert.True(t, t2.Sub(ts) > time.Millisecond*4)
 	assert.True(t, t1.Sub(ts) > time.Millisecond*4)
