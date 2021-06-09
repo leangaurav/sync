@@ -17,4 +17,4 @@ jobs:
           test "0" = $(gofmt -l .| wc -l)
       - name: Unit Test
         run: |
-          go test .
+          go test -race -covermode=atomic -coverprofile=coverage.out -covermode=atomic
