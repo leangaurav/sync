@@ -44,6 +44,6 @@ jobs:
           gistID: 0b68be6e579a2a2bdeca2de0174b3459
           filename: sync_main.json
           label: Test Coverage
-          message: "0"
+          message: ${{ env.COVERAGE }}
           color: green
           namedLogo: go
