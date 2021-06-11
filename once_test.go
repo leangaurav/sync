@@ -19,7 +19,7 @@ func returnFalseWithDelay(t time.Duration) func() bool {
 }
 
 func TestDefaults(t *testing.T) {
-	o, err := NewOnce(false, false, VerifyNone, returnTrue)
+	o, err := NewDefaultOnce(returnTrue)
 	assert.Equal(t, err, nil)
 	assert.Equal(t, o.Done(false), false)
 	assert.Equal(t, o.Do(), true)
