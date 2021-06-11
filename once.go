@@ -45,6 +45,11 @@ type Once struct {
 	unblock        uint32
 }
 
+// NewDefaultOnce is a wrapper over NewOnce. It returns a Once object with the default options.
+func NewDefaultOnce(f FuncType, fs ...FuncType) (*Once, error) {
+	return NewOnce(false, false, VerifyNone, f, fs...)
+}
+
 // NewOnce returns a new Once object with the give options. Atleast one function needs to be given.
 // In case of muliple functions, they are executed in the order they were passed.
 //
